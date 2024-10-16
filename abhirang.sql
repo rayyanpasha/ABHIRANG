@@ -1,142 +1,101 @@
--- Art Marketplace SQL Queries
--- ==========================
+-- SQL script for AbhiRang art marketplace
 
--- 1. User Management
+-- 1. User Registration
+-- Adding a new user to the user table
+INSERT INTO user (username, password_hash, email, phone_number, user_type, is_verified)
+VALUES ('new_user', 'hashed_password', 'new_user@example.com', '123-456-7890', 'buyer', 0);
 
--- a. Register a New User
-INSERT INTO "user" (username, password_hash, email, phone_number, user_type, is_verified)
-VALUES (?, ?, ?, ?, ?, 0);
+-- 2. User Login
+-- Verifying user credentials
+SELECT * FROM user 
+WHERE username = 'existing_user' 
+AND password_hash = 'hashed_password';
 
--- b. Login User
-SELECT username, user_type, is_verified 
-FROM "user"
-WHERE username = ? AND password_hash = ?;
+-- 3. View User Profile
+-- Fetching details of a logged-in user
+SELECT * FROM user 
+WHERE username = 'logged_in_user';
 
--- c. Update User Verification (Admin Only)
-UPDATE "user"
-SET is_verified = 1
-WHERE username = ?;
+-- 4. Update User Profile
+-- Updating the user's email and phone number
+UPDATE user 
+SET email = 'new_email@example.com', 
+    phone_number = '987-654-3210', 
+    is_verified = 1 
+WHERE username = 'logged_in_user';
 
+-- 5. Add Product to Cart
+-- Adding a new cart for the user
+INSERT INTO Cart (user_id, created_at, updated_at)
+VALUES (1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
--- 2. Category Management
+-- Adding a product to the cart
+INSERT INTO Cart_Item (cart_id, product_id, quantity, price_per_unit)
+VALUES ((SELECT cart_id FROM Cart WHERE user_id = 1 ORDER BY created_at DESC LIMIT 1), 
+        2, 1, (SELECT price FROM product WHERE product_id = 2));
 
--- a. List All Categories
-SELECT name, description 
-FROM "category";
+-- 6. View Cart Items
+-- Displaying all items in the user's cart
+SELECT ci.cart_item_id, p.name, ci.quantity, ci.price_per_unit
+FROM Cart_Item ci
+JOIN Cart c ON ci.cart_id = c.cart_id
+JOIN product p ON ci.product_id = p.product_id
+WHERE c.user_id = 1;  -- Replace with logged-in user's ID
 
--- b. Add a New Category (Admin Only)
-INSERT INTO "category" (name, description)
-VALUES (?, ?);
+-- 7. Remove Item from Cart
+-- Deleting an item from the cart
+DELETE FROM Cart_Item 
+WHERE cart_item_id = 1;  -- Replace with the ID of the item to be removed
 
-
--- 3. Product Management
-
--- a. Add a New Product (Artist Only)
-INSERT INTO "product" (name, description, price, stock_quantity, category_id, artist_id, rating, dimensions, medium, image_url)
-VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?);
-
--- b. List Products by Category
-SELECT name, description, price, stock_quantity 
-FROM "product"
-WHERE category_id = ?;
-
--- c. Display Product Details
-SELECT p.name, p.description, p.price, p.stock_quantity, p.rating, c.name AS category_name, u.username AS artist_name
-FROM "product" p
-JOIN "category" c ON p.category_id = c.category_id
-JOIN "user" u ON p.artist_id = u.user_id
-WHERE p.name = ?;
-
-
--- 4. Cart and Order Management
-
--- a. Display Items in User’s Cart
-SELECT ci.cart_id, p.name, ci.quantity, ci.price_per_unit, (ci.quantity * ci.price_per_unit) AS total_price
-FROM "Cart_Item" ci
-JOIN "Cart" c ON ci.cart_id = c.cart_id
-JOIN "product" p ON ci.product_id = p.product_id
-WHERE c.user_id = ?;
-
--- b. Add Item to Cart
-INSERT INTO "Cart_Item" (cart_id, product_id, quantity, price_per_unit)
-VALUES (?, ?, ?, ?);
-
--- c. Place an Order
+-- 8. Checkout
+-- Creating an order for the user
 INSERT INTO "Order" (user_id, order_date, total_amount, order_status)
-VALUES (?, CURRENT_TIMESTAMP, ?, 'pending');
+VALUES (1, CURRENT_TIMESTAMP, (SELECT SUM(quantity * price_per_unit) FROM Cart_Item WHERE cart_id = (SELECT cart_id FROM Cart WHERE user_id = 1)), 'Pending');
 
--- d. Add Order Items
-INSERT INTO "Order_Item" (order_id, product_id, quantity, price_per_unit)
-VALUES (?, ?, ?, ?);
+-- Adding order items to the Order_Item table
+INSERT INTO Order_Item (order_id, product_id, quantity, price_per_unit)
+SELECT (SELECT order_id FROM "Order" ORDER BY order_date DESC LIMIT 1), 
+       product_id, quantity, price_per_unit
+FROM Cart_Item
+WHERE cart_id = (SELECT cart_id FROM Cart WHERE user_id = 1);
 
+-- 9. Leave a Review
+-- Submitting a review for a product
+INSERT INTO Review (product_id, user_id, rating, comment, created_at)
+VALUES (2, 1, 5, 'This is an amazing product!', CURRENT_TIMESTAMP);
 
--- 5. Commission Management
+-- 10. View Reviews for a Product
+-- Fetching all reviews for a specific product
+SELECT r.rating, r.comment, u.username, r.created_at
+FROM Review r
+JOIN user u ON r.user_id = u.user_id
+WHERE r.product_id = 2;  -- Replace with the product ID
 
--- a. Request a Commission
-INSERT INTO "Commission" (user_id, artist_id, description, agreed_price, status, deadline, created_at)
-VALUES (?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP);
+-- 11. View Artist's Portfolio
+-- Displaying all artworks from an artist's portfolio
+SELECT ap.artwork_name, ap.description, ap.medium, ap.image_url
+FROM Artist_Portfolio ap
+WHERE ap.artist_id = 1;  -- Replace with the artist's ID
 
--- b. Update Commission Status (Artist Only)
-UPDATE "Commission"
-SET status = ?
-WHERE commission_id = ? AND artist_id = ?;
+-- 12. Search Products
+-- Searching for products by name or category
+SELECT * FROM product 
+WHERE name LIKE '%search_term%' 
+   OR category_id IN (SELECT category_id FROM category WHERE name LIKE '%search_term%');
 
+-- 13. View Categories
+-- Displaying all available categories
+SELECT * FROM category;
 
--- 6. Insurance Management
+-- 14. Get User Orders
+-- Fetching all orders made by a user
+SELECT o.order_id, o.order_date, o.total_amount, o.order_status
+FROM "Order" o
+WHERE o.user_id = 1;  -- Replace with the logged-in user's ID
 
--- a. Add Insurance for a Commission
-INSERT INTO "Insurance" (commission_id, is_insured, coverage_details, price, terms, created_at)
-VALUES (?, 1, ?, ?, ?, CURRENT_TIMESTAMP);
-
-
--- 7. Review Management
-
--- a. Add a Review for a Product
-INSERT INTO "Review" (product_id, user_id, rating, comment, created_at)
-VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP);
-
--- b. Display Reviews for a Product
-SELECT r.rating, r.comment, r.created_at, u.username
-FROM "Review" r
-JOIN "user" u ON r.user_id = u.user_id
-WHERE r.product_id = ?
-ORDER BY r.created_at DESC;
-
-
--- 8. Artist Portfolio Management
-
--- a. Add Artwork to Portfolio (Artist Only)
-INSERT INTO "Artist_Portfolio" (artist_id, artwork_name, description, medium, image_url, created_at)
-VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
-
--- b. Display Portfolio of an Artist
-SELECT artwork_name, description, medium, image_url
-FROM "Artist_Portfolio"
-WHERE artist_id = ?;
-
-
--- 9. Admin Dashboard Queries
-
--- a. Display Total Users and New Registrations
-SELECT COUNT(username) AS total_users,
-       COUNT(CASE WHEN created_at >= DATE('now', '-1 month') THEN 1 END) AS new_users_last_month
-FROM "user";
-
--- b. Display Most Sold Products
-SELECT p.name, COUNT(oi.order_id) AS total_sold, SUM(oi.price_per_unit * oi.quantity) AS total_revenue
-FROM "product" p
-JOIN "Order_Item" oi ON p.product_id = oi.product_id
-GROUP BY p.name
-ORDER BY total_sold DESC
-LIMIT 10;
-
-
--- 10. Top-Selling Artist (Homepage)
-SELECT u.username AS artist_name, COUNT(o.order_id) AS total_orders
-FROM "user" u
-JOIN "product" p ON u.user_id = p.artist_id
-JOIN "Order_Item" oi ON p.product_id = oi.product_id
-JOIN "Order" o ON oi.order_id = o.order_id
-GROUP BY u.username
-ORDER BY total_orders DESC
-LIMIT 1;
+-- 15. Get Order Details
+-- Viewing the details of a specific order
+SELECT oi.product_id, p.name, oi.quantity, oi.price_per_unit
+FROM Order_Item oi
+JOIN product p ON oi.product_id = p.product_id
+WHERE oi.order_id = 1;  -- Replace with the order ID
