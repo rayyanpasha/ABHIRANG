@@ -1,162 +1,289 @@
-import pandas as pd
-import numpy as np
 import sqlite3
 from datetime import datetime, timedelta
 import random
 
-# Database name
-db_name = 'ABHIRANG.db'
+# Function to generate random datetime
+def random_date(start, end):
+    return start + timedelta(days=random.randint(0, (end - start).days))
 
-# Number of records to generate for each table
-num_users = 50
-num_products = 100
-num_orders = 50
-num_commissions = 25
-num_reviews = 75
-num_categories = 5
+# Connect to the SQLite database (or create it if it doesn't exist)
+conn = sqlite3.connect('AbhiRang.db', detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+cursor = conn.cursor()
 
-# Generating users
-usernames = [f'user_{i}' for i in range(1, num_users + 1)]
-password_hashes = ['hashed_password'] * num_users  # Placeholder for hashed passwords
-emails = [f'user_{i}@example.com' for i in range(1, num_users + 1)]  # Ensure uniqueness
-phone_numbers = [f'555-010{i % 100}' for i in range(1, num_users + 1)]  # Modulo for unique phone numbers
-user_types = ['artist' if i % 2 == 0 else 'buyer' for i in range(num_users)]  # Alternate artist and buyer
+# Register adapters and converters for datetime
+def adapt_datetime(ts):
+    return ts.strftime('%Y-%m-%d %H:%M:%S')
 
-users_df = pd.DataFrame({
-    'username': usernames,
-    'password_hash': password_hashes,
-    'email': emails,
-    'phone_number': phone_numbers,
-    'user_type': user_types,
-    'is_verified': [random.choice([0, 1]) for _ in range(num_users)]
-})
+def convert_datetime(ts_bytes):
+    return datetime.strptime(ts_bytes.decode('utf-8'), '%Y-%m-%d %H:%M:%S')
 
-# Generating categories
-category_names = [f'Category {i}' for i in range(1, num_categories + 1)]
-category_descriptions = [f'Description for Category {i}' for i in range(1, num_categories + 1)]
+sqlite3.register_adapter(datetime, adapt_datetime)
+sqlite3.register_converter('timestamp', convert_datetime)
 
-categories_df = pd.DataFrame({
-    'name': category_names,
-    'description': category_descriptions
-})
+# Create tables
+cursor.executescript('''
+CREATE TABLE IF NOT EXISTS "user" (
+    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    password_hash TEXT,
+    email TEXT,
+    phone_number TEXT,
+    user_type TEXT,
+    is_verified INTEGER
+);
 
-# Generating products
-product_names = [f'Art Piece {i}' for i in range(1, num_products + 1)]
-product_descriptions = [f'Description of Art Piece {i}' for i in range(1, num_products + 1)]
-prices = [random.randint(100, 10000) for _ in range(num_products)]
-stock_quantities = [random.randint(1, 50) for _ in range(num_products)]
-category_ids = [random.randint(1, num_categories) for _ in range(num_products)]
-artist_ids = [random.choice(users_df[users_df['user_type'] == 'artist']['username'].index) + 1 for _ in range(num_products)]
-ratings = [round(random.uniform(1, 5), 1) for _ in range(num_products)]
-mediums = ['oil', 'watercolor', 'acrylic', 'digital', 'charcoal']
-dimensions = ['24x36 in', '18x24 in', '30x40 in']
+CREATE TABLE IF NOT EXISTS "category" (
+    category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    description TEXT
+);
 
-products_df = pd.DataFrame({
-    'name': product_names,
-    'description': product_descriptions,
-    'price': prices,
-    'stock_quantity': stock_quantities,
-    'category_id': category_ids,
-    'artist_id': artist_ids,
-    'rating': ratings,
-    'dimensions': [random.choice(dimensions) for _ in range(num_products)],
-    'medium': [random.choice(mediums) for _ in range(num_products)],
-    'image_url': [f'https://example.com/art_{i}.jpg' for i in range(1, num_products + 1)]
-})
+CREATE TABLE IF NOT EXISTS "product" (
+    product_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    description TEXT,
+    price INTEGER,
+    stock_quantity INTEGER,
+    category_id INTEGER,
+    artist_id INTEGER,
+    rating REAL,
+    dimensions TEXT,
+    medium TEXT,
+    image_url TEXT,
+    FOREIGN KEY (category_id) REFERENCES category(category_id)
+);
 
-# Generating carts
-carts_df = pd.DataFrame({
-    'user_id': [random.randint(1, num_users) for _ in range(num_users)],
-    'created_at': [datetime.now() - timedelta(days=random.randint(1, 30)) for _ in range(num_users)],
-    'updated_at': [datetime.now() for _ in range(num_users)]
-})
+CREATE TABLE IF NOT EXISTS "Cart" (
+    cart_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
+);
 
-# Generating cart items
-cart_items_df = pd.DataFrame({
-    'cart_id': [random.randint(1, num_users) for _ in range(num_products)],
-    'product_id': [random.randint(1, num_products) for _ in range(num_products)],
-    'quantity': [random.randint(1, 5) for _ in range(num_products)],
-    'price_per_unit': [random.randint(100, 10000) for _ in range(num_products)]
-})
+CREATE TABLE IF NOT EXISTS "Cart_Item" (
+    cart_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cart_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER,
+    price_per_unit INTEGER,
+    FOREIGN KEY (cart_id) REFERENCES Cart(cart_id),
+    FOREIGN KEY (product_id) REFERENCES product(product_id)
+);
 
-# Generating orders
-order_dates = [datetime.now() - timedelta(days=random.randint(1, 60)) for _ in range(num_orders)]
-total_amounts = [random.randint(100, 5000) for _ in range(num_orders)]
-order_statuses = ['completed', 'pending', 'shipped', 'canceled']
+CREATE TABLE IF NOT EXISTS "Order" (
+    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    order_date TIMESTAMP,
+    total_amount INTEGER,
+    order_status TEXT,
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
+);
 
-orders_df = pd.DataFrame({
-    'user_id': [random.randint(1, num_users) for _ in range(num_orders)],
-    'order_date': order_dates,
-    'total_amount': total_amounts,
-    'order_status': [random.choice(order_statuses) for _ in range(num_orders)]
-})
+CREATE TABLE IF NOT EXISTS "Order_Item" (
+    order_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER,
+    price_per_unit INTEGER,
+    FOREIGN KEY (order_id) REFERENCES "Order"(order_id),
+    FOREIGN KEY (product_id) REFERENCES product(product_id)
+);
 
-# Generating order items
-order_items_df = pd.DataFrame({
-    'order_id': [random.randint(1, num_orders) for _ in range(num_products)],
-    'product_id': [random.randint(1, num_products) for _ in range(num_products)],
-    'quantity': [random.randint(1, 5) for _ in range(num_products)],
-    'price_per_unit': [random.randint(100, 10000) for _ in range(num_products)]
-})
+CREATE TABLE IF NOT EXISTS "Commission" (
+    commission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    artist_id INTEGER,
+    description TEXT,
+    agreed_price INTEGER,
+    status TEXT,
+    deadline TIMESTAMP,
+    created_at TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user(user_id),
+    FOREIGN KEY (artist_id) REFERENCES user(user_id)
+);
 
-# Generating commissions
-commissions_df = pd.DataFrame({
-    'user_id': [random.randint(1, num_users) for _ in range(num_commissions)],
-    'artist_id': [random.choice(users_df[users_df['user_type'] == 'artist']['username'].index) + 1 for _ in range(num_commissions)],
-    'description': [f'Commission description {i}' for i in range(1, num_commissions + 1)],
-    'agreed_price': [random.randint(200, 5000) for _ in range(num_commissions)],
-    'status': [random.choice(['pending', 'in progress', 'completed']) for _ in range(num_commissions)],
-    'deadline': [datetime.now() + timedelta(days=random.randint(1, 60)) for _ in range(num_commissions)],
-    'created_at': [datetime.now() for _ in range(num_commissions)]
-})
+CREATE TABLE IF NOT EXISTS "Insurance" (
+    insurance_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    commission_id INTEGER,
+    is_insured INTEGER,
+    coverage_details TEXT,
+    price INTEGER,
+    terms TEXT,
+    created_at TIMESTAMP,
+    FOREIGN KEY (commission_id) REFERENCES Commission(commission_id)
+);
 
-# Generating insurances
-insurances_df = pd.DataFrame({
-    'commission_id': [i + 1 for i in range(num_commissions)],
-    'is_insured': [random.choice([0, 1]) for _ in range(num_commissions)],
-    'coverage_details': [f'Coverage details {i}' for i in range(1, num_commissions + 1)],
-    'price': [random.randint(100, 1000) for _ in range(num_commissions)],
-    'terms': [f'Terms for insurance {i}' for i in range(1, num_commissions + 1)],
-    'created_at': [datetime.now() for _ in range(num_commissions)]
-})
+CREATE TABLE IF NOT EXISTS "Review" (
+    review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER,
+    user_id INTEGER,
+    rating INTEGER,
+    comment TEXT,
+    created_at TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES product(product_id),
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
+);
 
-# Generating reviews
-reviews_df = pd.DataFrame({
-    'product_id': [random.randint(1, num_products) for _ in range(num_reviews)],
-    'user_id': [random.randint(1, num_users) for _ in range(num_reviews)],
-    'rating': [random.randint(1, 5) for _ in range(num_reviews)],
-    'comment': [f'Review comment {i}' for i in range(1, num_reviews + 1)],
-    'created_at': [datetime.now() - timedelta(days=random.randint(1, 60)) for _ in range(num_reviews)]
-})
+CREATE TABLE IF NOT EXISTS "Artist_Portfolio" (
+    artist_portfolio_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER,
+    artwork_name TEXT,
+    description TEXT,
+    medium TEXT,
+    image_url TEXT,
+    created_at TIMESTAMP,
+    FOREIGN KEY (artist_id) REFERENCES user(user_id)
+);
+''')
 
-# Generating artist portfolios
-portfolios_df = pd.DataFrame({
-    'artist_id': [random.choice(users_df[users_df['user_type'] == 'artist']['username'].index) + 1 for _ in range(num_products)],
-    'artwork_name': [f'Artwork {i}' for i in range(1, num_products + 1)],
-    'description': [f'Description for artwork {i}' for i in range(1, num_products + 1)],
-    'medium': [random.choice(mediums) for _ in range(num_products)],
-    'image_url': [f'https://example.com/portfolio_{i}.jpg' for i in range(1, num_products + 1)],
-    'created_at': [datetime.now() - timedelta(days=random.randint(1, 60)) for _ in range(num_products)]
-})
+# Function to populate the database with sample data
+def populate_database():
+    # Populate categories
+    categories = [
+        ("Painting", "Various styles of painting."),
+        ("Sculpture", "Three-dimensional artworks."),
+        ("Digital Art", "Art created digitally."),
+        ("Photography", "Art captured through a camera."),
+        ("Crafts", "Handmade decorative items.")
+    ]
+    
+    for category in categories:
+        cursor.execute('''
+            INSERT INTO category (name, description)
+            VALUES (?, ?)
+        ''', category)
 
-# Connecting to SQLite database
-conn = sqlite3.connect(db_name)
+    # Populate users
+    for i in range(1, 201):
+        username = f'user{i}'
+        password_hash = f'hash{i}'  # In practice, use proper hashing
+        email = f'user{i}@example.com'
+        phone_number = f'123-456-789{i % 10}'
+        user_type = random.choice(['buyer', 'artist'])
+        is_verified = random.choice([0, 1])
+        cursor.execute('''
+            INSERT INTO user (username, password_hash, email, phone_number, user_type, is_verified)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, password_hash, email, phone_number, user_type, is_verified))
 
-# Saving data to the database
-users_df.to_sql('user', conn, if_exists='append', index=False)
-categories_df.to_sql('category', conn, if_exists='append', index=False)
-products_df.to_sql('product', conn, if_exists='append', index=False)
-carts_df.to_sql('Cart', conn, if_exists='append', index=False)
-cart_items_df.to_sql('Cart_Item', conn, if_exists='append', index=False)
-orders_df.to_sql('Order', conn, if_exists='append', index=False)
-order_items_df.to_sql('Order_Item', conn, if_exists='append', index=False)
-commissions_df.to_sql('Commission', conn, if_exists='append', index=False)
-insurances_df.to_sql('Insurance', conn, if_exists='append', index=False)
-reviews_df.to_sql('Review', conn, if_exists='append', index=False)
-portfolios_df.to_sql('Artist_Portfolio', conn, if_exists='append', index=False)
+    # Populate products
+    for i in range(1, 201):
+        name = f'Product {i}'
+        description = f'Description for product {i}'
+        price = random.randint(10, 500)
+        stock_quantity = random.randint(1, 100)
+        category_id = random.randint(1, len(categories))
+        artist_id = random.randint(1, 200)  # Assuming user IDs 1-200 are artists
+        rating = random.uniform(1, 5)
+        dimensions = f'{random.randint(1, 100)} x {random.randint(1, 100)} cm'
+        medium = random.choice(['Oil', 'Acrylic', 'Digital', 'Sculpture'])
+        image_url = f'http://example.com/images/product_{i}.jpg'
+        cursor.execute('''
+            INSERT INTO product (name, description, price, stock_quantity, category_id, artist_id, rating, dimensions, medium, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, description, price, stock_quantity, category_id, artist_id, rating, dimensions, medium, image_url))
 
-# Commit changes and close the connection
-conn.commit()
+    # Populate carts
+    for i in range(1, 201):
+        user_id = random.randint(101, 200)  # Assuming buyers have user_id 101-200
+        created_at = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        updated_at = created_at + timedelta(hours=random.randint(1, 24))
+        cursor.execute('''
+            INSERT INTO Cart (user_id, created_at, updated_at)
+            VALUES (?, ?, ?)
+        ''', (user_id, created_at, updated_at))
+
+    # Populate cart items
+    for i in range(1, 201):
+        cart_id = random.randint(1, 200)  # Assuming cart IDs are 1-200
+        product_id = random.randint(1, 200)  # Assuming product IDs are 1-200
+        quantity = random.randint(1, 5)
+        price_per_unit = random.randint(10, 500)
+        cursor.execute('''
+            INSERT INTO Cart_Item (cart_id, product_id, quantity, price_per_unit)
+            VALUES (?, ?, ?, ?)
+        ''', (cart_id, product_id, quantity, price_per_unit))
+
+    # Populate orders
+    for i in range(1, 201):
+        user_id = random.randint(101, 200)  # Assuming buyers have user_id 101-200
+        order_date = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        total_amount = random.randint(10, 2000)
+        order_status = random.choice(['Pending', 'Shipped', 'Delivered', 'Cancelled'])
+        cursor.execute('''
+            INSERT INTO "Order" (user_id, order_date, total_amount, order_status)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, order_date, total_amount, order_status))
+
+    # Populate order items
+    for i in range(1, 201):
+        order_id = random.randint(1, 200)  # Assuming order IDs are 1-200
+        product_id = random.randint(1, 200)  # Assuming product IDs are 1-200
+        quantity = random.randint(1, 5)
+        price_per_unit = random.randint(10, 500)
+        cursor.execute('''
+            INSERT INTO Order_Item (order_id, product_id, quantity, price_per_unit)
+            VALUES (?, ?, ?, ?)
+        ''', (order_id, product_id, quantity, price_per_unit))
+
+    # Populate commissions
+    for i in range(1, 201):
+        user_id = random.randint(101, 200)  # Assuming buyers have user_id 101-200
+        artist_id = random.randint(1, 200)  # Assuming user IDs 1-200 are artists
+        description = f'Commission for user {user_id}'
+        agreed_price = random.randint(50, 1000)
+        status = random.choice(['Pending', 'In Progress', 'Completed', 'Cancelled'])
+        deadline = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        created_at = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        cursor.execute('''
+            INSERT INTO Commission (user_id, artist_id, description, agreed_price, status, deadline, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, artist_id, description, agreed_price, status, deadline, created_at))
+
+    # Populate insurance
+    for i in range(1, 201):
+        commission_id = random.randint(1, 200)  # Assuming commission IDs are 1-200
+        is_insured = random.choice([0, 1])
+        coverage_details = f'Coverage for commission {commission_id}'
+        price = random.randint(10, 100)
+        terms = f'Terms for insurance {commission_id}'
+        created_at = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        cursor.execute('''
+            INSERT INTO Insurance (commission_id, is_insured, coverage_details, price, terms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (commission_id, is_insured, coverage_details, price, terms, created_at))
+
+    # Populate reviews
+    for i in range(1, 201):
+        product_id = random.randint(1, 200)  # Assuming product IDs are 1-200
+        user_id = random.randint(101, 200)  # Assuming buyers have user_id 101-200
+        rating = random.randint(1, 5)
+        comment = f'Review comment for product {product_id}'
+        created_at = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        cursor.execute('''
+            INSERT INTO Review (product_id, user_id, rating, comment, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (product_id, user_id, rating, comment, created_at))
+
+    # Populate artist portfolios
+    for i in range(1, 201):
+        artist_id = random.randint(1, 200)  # Assuming user IDs 1-200 are artists
+        artwork_name = f'Artwork {i}'
+        description = f'Description for artwork {i}'
+        medium = random.choice(['Oil', 'Acrylic', 'Digital', 'Sculpture'])
+        image_url = f'http://example.com/images/artwork_{i}.jpg'
+        created_at = random_date(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        cursor.execute('''
+            INSERT INTO Artist_Portfolio (artist_id, artwork_name, description, medium, image_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (artist_id, artwork_name, description, medium, image_url, created_at))
+
+    # Commit changes
+    conn.commit()
+
+# Run the population function
+populate_database()
+
+# Close the connection
 conn.close()
-
-print("Data generated and imported successfully into ABHIRANG.db!")
