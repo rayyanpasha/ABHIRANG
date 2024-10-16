@@ -99,7 +99,7 @@ def create_order():
     order_status = new_order['order_status']
     
     conn = get_db_connection()
-    conn.execute('INSERT INTO Order (user_id, order_date, total_amount, order_status) VALUES (?, ?, ?, ?)',
+    conn.execute('INSERT INTO "Order" (user_id, order_date, total_amount, order_status) VALUES (?, ?, ?, ?)',
                  (user_id, order_date, total_amount, order_status))
     conn.commit()
     conn.close()
@@ -109,9 +109,11 @@ def create_order():
 @app.route('/users/<int:user_id>/orders', methods=['GET'])
 def get_user_orders(user_id):
     conn = get_db_connection()
-    orders = conn.execute('SELECT * FROM Order WHERE user_id = ?', (user_id,)).fetchall()
+    # Use double quotes around "Order" to avoid syntax error
+    orders = conn.execute('SELECT * FROM "Order" WHERE user_id = ?', (user_id,)).fetchall()
     conn.close()
     return jsonify([dict(order) for order in orders])
+
 
 # API to add a review
 @app.route('/reviews', methods=['POST'])
@@ -129,6 +131,9 @@ def add_review():
     conn.close()
     return jsonify(new_review), 201
 
+
+
+
 # API to get reviews for a product
 @app.route('/products/<int:product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
@@ -136,6 +141,7 @@ def get_product_reviews(product_id):
     reviews = conn.execute('SELECT * FROM Review WHERE product_id = ?', (product_id,)).fetchall()
     conn.close()
     return jsonify([dict(review) for review in reviews])
+
 
 # API to view cart items
 @app.route('/users/<int:user_id>/cart', methods=['GET'])
