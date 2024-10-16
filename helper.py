@@ -1,6 +1,6 @@
 import sqlite3
 
-DATABASE_NAME = 'ikea.db'
+DATABASE_NAME = 'ABHIRANG.db'
 
 # Helper Functions for Flask app
 
