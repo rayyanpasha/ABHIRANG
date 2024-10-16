@@ -230,5 +230,15 @@ def create_insurance():
     conn.close()
     return jsonify(new_insurance), 201
 
+@app.route('/insurances', methods=['GET'])
+def get_insurance_records():
+    try:
+        conn = get_db_connection()
+        insurance_records = conn.execute('SELECT * FROM Insurance').fetchall()
+        conn.close()
+        return jsonify([dict(record) for record in insurance_records])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
